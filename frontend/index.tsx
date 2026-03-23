@@ -1,0 +1,31 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import { AuthProvider } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { AlertProvider } from './context/AlertContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { initMobileApp } from './services/mobileInit';
+
+// Initialize mobile features (no-op on web)
+initMobileApp();
+
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <ThemeProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <AlertProvider>
+            <App />
+          </AlertProvider>
+        </NotificationProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  </React.StrictMode>
+);

@@ -1,0 +1,470 @@
+// src/services/mockApi.ts
+
+import { Role, Doctor, Patient, User, LoggedInUser, DoctorPatientMessage, Nurse, Receptionist, AnalyticsData, VitalSign } from '../types';
+import { chatService, Message } from './chatService';
+
+// Read backend configuration from environment variables.
+// In microservices architecture, all API calls go through the Nginx gateway.
+// For production: VITE_BACKEND_URL should be empty string "" for relative URLs (same origin).
+// For development: VITE_BACKEND_URL defaults to http://localhost:8080.
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
+console.log("=====================================================");
+console.log(backendUrl)
+const BASE_URL = backendUrl !== undefined ? `${backendUrl}/api` : '/api';
+
+
+// --- Helper Functions ---
+const getToken = () => sessionStorage.getItem('authToken');
+
+const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+  const token = getToken();
+
+  // Use the standard Headers object for more robust header management.
+  const headers = new Headers(options.headers || {});
+  headers.set('Content-Type', 'application/json');
+
+  // Add the Authorization header to all requests except for the login endpoint.
+  if (token) {
+    headers.set('authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Network error' }));
+    throw new Error(errorData.message || `Request failed with status ${response.status}`);
+  }
+
+  // Handle responses that might not have a body (e.g., DELETE requests)
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.indexOf("application/json") !== -1) {
+    const json = await response.json();
+    if (json.status && json.status !== 'success') {
+        throw new Error(json.message || 'API operation failed');
+    }
+    return json.data || json; // Return 'data' if it exists, otherwise the full object
+  }
+
+  return {}; // Return empty object for non-json responses
+};
+
+// --- Mappers ---
+// MODIFICATION: Added explicitRole parameter to mapUserFromApi
+const mapUserFromApi = (apiUser: any, explicitRole?: Role): LoggedInUser => {
+    if (!apiUser) {
+        throw new Error("mapUserFromApi received null or undefined user data.");
+    }
+    // MODIFICATION: Prioritize explicitRole if provided, otherwise fallback to apiUser.role
+    const role = (explicitRole || (apiUser.role || '')).toLowerCase() as Role;
+
+    // console.log("mapUserFromApi debug -> apiUser:", apiUser, "explicitRole:", explicitRole, "-> derived role:", role); // Debugging line
+
+    const baseUser = {
+        id: apiUser.staff_id || apiUser.patient_id || apiUser._id || 'unknown-id',
+        _id: apiUser._id,
+        name: apiUser.name || 'Unnamed User',
+        email: apiUser.email || 'no-email@example.com',
+        age: apiUser.age || 0,
+        // Gender handled specifically per role below
+    };
+
+    switch (role) {
+        case Role.Patient:
+            const patientGender = (apiUser.gender || '').toLowerCase();
+            const mappedPatientGender: 'Male' | 'Female' =
+                patientGender === 'female' ? 'Female' : 'Male';
+
+            return {
+                ...baseUser,
+                role: Role.Patient,
+                deviceId: apiUser.device_id || '', // This should now correctly map "dev003"
+                assignedDoctorId: apiUser.doctor_id || '',
+                gender: mappedPatientGender,
+            } as Patient;
+        case Role.Doctor:
+            const doctorGender = (apiUser.gender || '').toLowerCase();
+            const mappedDoctorGender: 'male' | 'female' = doctorGender === 'female' ? 'female' : 'male';
+            return {
+                ...baseUser,
+                role: Role.Doctor,
+                patients: [],
+                specialization: apiUser.specialization || 'General Practice',
+                contact: apiUser.contact || 'N/A',
+                gender: mappedDoctorGender,
+             } as Doctor
+        case Role.Nurse:
+            const nurseGender = (apiUser.gender || '').toLowerCase();
+            const mappedNurseGender: 'male' | 'female' = nurseGender === 'female' ? 'female' : 'male';
+            return {
+                ...baseUser,
+                role: Role.Nurse,
+                gender: mappedNurseGender,
+            } as Nurse;
+        case Role.Receptionist:
+            const receptionistGender = (apiUser.gender || '').toLowerCase();
+            const mappedReceptionistGender: 'male' | 'female' = receptionistGender === 'female' ? 'female' : 'male';
+            return {
+                ...baseUser,
+                role: Role.Receptionist,
+                gender: mappedReceptionistGender,
+            } as Receptionist;
+        case Role.Admin:
+            const adminGender = (apiUser.gender || '').toLowerCase();
+            const mappedAdminGender: 'male' | 'female' = adminGender === 'female' ? 'female' : 'male';
+            return {
+                ...baseUser,
+                role: Role.Admin,
+                gender: mappedAdminGender,
+            } as User;
+        default:
+            // This default should ideally not be hit if the explicitRole is passed correctly.
+            // If it is hit, it means an unexpected role value was encountered.
+            console.warn(`Attempted to map user with unknown role: ${role}. Falling back to generic User.`);
+            // Default to Male gender as "Other" is removed.
+            return { ...baseUser, role: Role.Admin, gender: 'Male' } as User; // Default to Admin as a generic fallback if role is truly unknown
+    }
+};
+
+
+// --- Real API Implementation ---
+
+export const api = {
+  login: async (email: string, password: string): Promise<LoggedInUser | null> => {
+    const response = await fetch(`${BASE_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.message || errorData.data || 'Invalid email or password.';
+        const err: any = new Error(errorMessage);
+        err.field = errorData.field || null;
+        throw err;
+    }
+
+    const json = await response.json();
+    if (json.status !== 'success') {
+        throw new Error(json.message || json.data || 'Login failed');
+    }
+
+    const loginData = json.data || json;
+
+    if (loginData.token && loginData.role && loginData.user_id) {
+        const token = loginData.token;
+        const role = (loginData.role as string).toLowerCase() as Role;
+        const userId = loginData.user_id;
+
+        sessionStorage.setItem('authToken', token);
+
+        let rawUserDetailsFromAPI: any;
+
+        try {
+            if (role === Role.Patient) {
+                const { patient } = await apiFetch(`/patients/${userId}`);
+                rawUserDetailsFromAPI = patient;
+            } else if (role === Role.Admin) {
+                // Admin users are not stored in Staff collection - create basic admin object
+                rawUserDetailsFromAPI = {
+                    _id: userId,
+                    staff_id: userId,
+                    name: 'Administrator',
+                    email: email,
+                    role: Role.Admin,
+                    age: 0,
+                    gender: 'male'
+                };
+            }
+            else { // Doctor, Nurse, Receptionist (all other staff types)
+                const { staffMem } = await apiFetch(`/staff/${userId}`);
+                rawUserDetailsFromAPI = staffMem;
+            }
+        } catch (detailFetchError) {
+            console.error(`Failed to fetch full user details for ${role} with ID ${userId}:`, detailFetchError);
+            sessionStorage.removeItem('authToken');
+            throw new Error(`Login successful, but failed to retrieve full details for ${role}. Permissions issue or missing user profile.`);
+        }
+
+
+        if (rawUserDetailsFromAPI) {
+            console.log("==== rawUserDetailsFromAPI (before mapping) =====");
+            console.log(rawUserDetailsFromAPI);
+            // MODIFICATION: Pass the 'role' explicitly to mapUserFromApi
+            let foundUser = mapUserFromApi(rawUserDetailsFromAPI, role);
+            console.log("==== foundUser (after mapping) =====");
+            console.log(foundUser);
+            // The role should already be correct now due to explicit passing, but this line ensures it.
+            foundUser.role = role;
+
+            if (foundUser.role === Role.Doctor) {
+                try {
+                    const doctorPatients = await api.getDoctorPatients(foundUser.id);
+                    (foundUser as Doctor).patients = doctorPatients.map(p => p.id);
+                } catch (e) {
+                    console.error(`Failed to fetch patients for doctor ${foundUser.id}`, e);
+                    (foundUser as Doctor).patients = [];
+                }
+            }
+
+            // Store the login password so Profile page can show it
+            (foundUser as any).password = password;
+            sessionStorage.setItem('user', JSON.stringify(foundUser));
+            return foundUser;
+        } else {
+            sessionStorage.removeItem('authToken');
+            throw new Error("Login successful, but failed to construct user object.");
+        }
+    }
+
+    throw new Error("Login failed: Incomplete response from server.");
+  },
+
+
+  // Patient data
+  getPatient: async (id: string): Promise<Patient> => {
+    const { patient } = await apiFetch(`/patients/${id}`);
+    // MODIFICATION: Pass Role.Patient explicitly as this endpoint specifically returns a patient
+    return mapUserFromApi(patient, Role.Patient) as Patient;
+  },
+  getAllPatients: async (): Promise<Patient[]> => {
+    const { patients } = await apiFetch('/patients');
+    return patients.map((p: any) => {
+        // MODIFICATION: Pass Role.Patient explicitly for each patient in the array
+        return mapUserFromApi(p, Role.Patient) as Patient;
+    });
+  },
+  addPatient: (patientData: Omit<Patient, 'role' | 'email'> & {email: string}) => {
+    const apiData = {
+        patient_id: patientData.id,
+        name: patientData.name,
+        age: patientData.age,
+        gender: patientData.gender,
+        device_id: patientData.deviceId,
+        doctor_id: patientData.assignedDoctorId,
+        email: patientData.email
+    };
+    return apiFetch('/patients/add', { method: 'POST', body: JSON.stringify(apiData) });
+  },
+  updatePatient: (patientId: string, updatedData: Partial<Patient>) => {
+    const apiData = {
+        name: updatedData.name,
+        age: updatedData.age,
+        gender: updatedData.gender,
+        email: updatedData.email,
+        device_id: updatedData.deviceId,
+        doctor_id: updatedData.assignedDoctorId,
+    }
+    return apiFetch(`/patients/${patientId}`, { method: 'PATCH', body: JSON.stringify(apiData) });
+  },
+  deletePatient: (patientId: string) => {
+    return apiFetch(`/patients/${patientId}`, { method: 'DELETE' });
+  },
+
+  // Staff data
+  getAllStaff: async (): Promise<(Doctor | Nurse | Receptionist)[]> => {
+    const { staff } = await apiFetch('/staff/');
+    // For general staff, their 'role' *should* be present in the staff object from the API.
+    // If not, you might need to adjust the backend or infer roles based on other fields.
+    // Assuming 'staff' objects from the API contain a 'role' field.
+    return staff.map((s: any) => mapUserFromApi(s));
+  },
+  getDoctor: async (id: string): Promise<Doctor> => {
+    const { staffMem } = await apiFetch(`/staff/${id}`);
+    // MODIFICATION: Explicitly pass Role.Doctor
+    return mapUserFromApi(staffMem, Role.Doctor) as Doctor;
+  },
+  getDoctorPatients: async (doctorId: string): Promise<Patient[]> => {
+    const { docPatients } = await apiFetch(`/other/doc/pats/${doctorId}`);
+    return docPatients.map((p: any) => mapUserFromApi(p, Role.Patient) as Patient);
+  },
+  getAllDoctors: async (): Promise<Doctor[]> => {
+    const { Doctors } = await apiFetch('/staff/doctors');
+    return Doctors.map((d: any) => mapUserFromApi(d, Role.Doctor) as Doctor);
+  },
+  getAllNurses: async (): Promise<Nurse[]> => {
+    const { nurses } = await apiFetch('/staff/nurses');
+    return nurses.map((n: any) => mapUserFromApi(n, Role.Nurse) as Nurse);
+  },
+  getAllReceptionists: async (): Promise<Receptionist[]> => {
+    const { receptionists } = await apiFetch('/staff/receptionists');
+    return receptionists.map((r: any) => mapUserFromApi(r, Role.Receptionist) as Receptionist);
+  },
+  addStaffMember: (staffData: any) => {
+    const apiData = {
+        staff_id: staffData.id,
+        name: staffData.name,
+        age: staffData.age,
+        gender: staffData.gender,
+        email: staffData.email,
+        role: staffData.role
+    };
+    return apiFetch('/staff/add', { method: 'POST', body: JSON.stringify(apiData) });
+  },
+  deleteStaffMember: (staffId: string) => {
+    return apiFetch(`/staff/${staffId}`, { method: 'DELETE' });
+  },
+  updateStaffMember: (staffId: string, staffData: any) => {
+    const apiData: any = {};
+    if (staffData.name !== undefined) apiData.name = staffData.name;
+    if (staffData.age !== undefined) apiData.age = staffData.age;
+    if (staffData.gender !== undefined) apiData.gender = staffData.gender;
+    if (staffData.email !== undefined) apiData.email = staffData.email;
+    if (staffData.role !== undefined) apiData.role = staffData.role;
+    return apiFetch(`/staff/${staffId}`, { method: 'PATCH', body: JSON.stringify(apiData) });
+  },
+
+  // Vitals Data
+  getReadingsForDevice: async(deviceId: string) => {
+      console.log("==================   only one device  ==============")
+      const { "dev_Readings": readings } = await apiFetch(`/readings/${deviceId}`);
+      console.log("this is the total reading acco to the device_id"+ deviceId)
+      console.log(readings)
+      return readings;
+  },
+  getAllReadings: async() => {
+    console.log("=============== all readings  =================")
+      const { readings } = await apiFetch('/readings');
+      return readings;
+  },
+
+
+  // --- Retained Mock Implementations ---
+
+  getAnalytics: (): Promise<AnalyticsData> => {
+    const data: AnalyticsData = {
+      totalPatients: [
+        { month: 'Jan', count: 2 }, { month: 'Feb', count: 2 }, { month: 'Mar', count: 3 },
+        { month: 'Apr', count: 3 }, { month: 'May', count: 3 }, { month: 'Jun', count: 3 },
+      ],
+      alertStatistics: [
+        { day: 'Mon', count: 5 }, { day: 'Tue', count: 8 }, { day: 'Wed', count: 3 },
+        { day: 'Thu', count: 6 }, { day: 'Fri', count: 9 }, { day: 'Sat', count: 4 }, { day: 'Sun', count: 2 },
+      ],
+      genderDistribution: [ { name: 'Male', value: 2 }, { name: 'Female', value: 1 } ],
+    };
+    return new Promise(resolve => setTimeout(() => resolve(data), 800));
+  },
+
+  /**
+   * Helper function to convert backend Message to frontend DoctorPatientMessage
+   */
+  _convertMessage: (msg: Message): DoctorPatientMessage => {
+    return {
+      id: msg._id,
+      senderId: msg.sender_id,
+      receiverId: msg.receiver_id,
+      text: msg.message,
+      timestamp: new Date(msg.timestamp),
+      read: msg.read,
+    };
+  },
+
+  /**
+   * Get conversation messages between two participants
+   * Uses backend API to fetch messages for the conversation
+   */
+  getConversation: async (participant1Id: string, participant2Id: string): Promise<DoctorPatientMessage[]> => {
+    // The first param is always the patient ID, second is the doctor ID
+    // (see caller sites: getConversation(patientId, doctorId))
+    const patientId = participant1Id;
+    const conversationId = chatService.getConversationId(patientId);
+    
+    try {
+      const messages = await chatService.getConversationMessages(conversationId);
+      return messages.map(api._convertMessage).sort((a, b) => 
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Send a message from sender to receiver
+   * Uses backend API to send message
+   */
+  sendMessage: async (senderId: string, receiverId: string, text: string): Promise<DoctorPatientMessage> => {
+    // Conversation ID is always conv_{patientId}
+    // When patient sends: senderId=patientId. When doctor sends: receiverId=patientId.
+    // Since callers always pass (patient.id, doctor.id, text) or use socket, use senderId as patient by default.
+    const conversationId = chatService.getConversationId(senderId);
+    
+    try {
+      const messageData = {
+        conversation_id: conversationId,
+        sender_id: senderId,
+        receiver_id: receiverId,
+        message: text,
+      };
+      
+      const sentMessage = await chatService.sendMessage(messageData);
+      return api._convertMessage(sentMessage);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get all conversations for a doctor with patients
+   * Uses backend API to fetch doctor's conversations
+   */
+  getDoctorConversations: async (doctorId: string): Promise<{ patient: Patient, lastMessage: DoctorPatientMessage, unreadCount: number }[]> => {
+    try {
+      const conversations = await chatService.getDoctorConversations(doctorId);
+      const patients = await api.getAllPatients();
+      
+      const result = await Promise.all(
+        conversations.map(async (conv) => {
+          const patient = patients.find(p => p.id === conv.patient_id);
+          if (!patient) return null;
+          
+          // Fetch messages for this conversation to count unread
+          const messages = await chatService.getConversationMessages(conv.conversation_id);
+          const unreadCount = chatService.countUnreadMessages(messages, doctorId);
+          
+          const lastMessage: DoctorPatientMessage = {
+            id: conv._id,
+            senderId: conv.patient_id, // Assuming last message was from patient
+            receiverId: doctorId,
+            text: conv.last_message,
+            timestamp: new Date(conv.updated_at),
+            read: unreadCount === 0,
+          };
+          
+          return { patient, lastMessage, unreadCount };
+        })
+      );
+      
+      return result
+        .filter((item): item is { patient: Patient, lastMessage: DoctorPatientMessage, unreadCount: number } => item !== null)
+        .sort((a, b) => new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime());
+    } catch (error) {
+      console.error('Error fetching doctor conversations:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Mark messages as read between sender and receiver
+   * Uses backend API to mark messages as read
+   */
+  markMessagesAsRead: async (patientId: string, markingUserId: string): Promise<boolean> => {
+    // patientId determines the conversation, markingUserId is who is reading
+    const conversationId = chatService.getConversationId(patientId);
+    const userId = markingUserId;
+    
+    try {
+      await chatService.markMessagesAsRead({
+        conversation_id: conversationId,
+        user_id: userId,
+      });
+      return true;
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+      return false;
+    }
+  },
+};
