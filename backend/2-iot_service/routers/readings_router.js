@@ -5,7 +5,7 @@ const {verifyToken,  verify_A, verify_APND} = require("../middleware/verify_toke
 
 
 router.route("/")
-     .get(verifyToken,verify_A,controller.getAllReadings)   //   verifyToken,verify_A,
+     .get(verifyToken,verify_APND,controller.getAllReadings)   //   verifyToken,verify_A,
      
 
 router.route("/add")                   

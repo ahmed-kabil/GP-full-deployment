@@ -1,2 +1,4 @@
 .env
 node_modules/
+create_image_script.sh
+run_containers_script.sh

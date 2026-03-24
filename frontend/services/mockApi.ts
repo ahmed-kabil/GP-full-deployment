@@ -8,8 +8,6 @@ import { chatService, Message } from './chatService';
 // For production: VITE_BACKEND_URL should be empty string "" for relative URLs (same origin).
 // For development: VITE_BACKEND_URL defaults to http://localhost:8080.
 const backendUrl = import.meta.env.VITE_BACKEND_URL;
-console.log("=====================================================");
-console.log(backendUrl)
 const BASE_URL = backendUrl !== undefined ? `${backendUrl}/api` : '/api';
 
 
