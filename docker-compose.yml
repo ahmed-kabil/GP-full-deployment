@@ -1,0 +1,66 @@
+  version: "3.9"
+
+  services:
+    mongo:
+      volumes:
+        - mongo_vol:/data/db
+      image: mongo:8.2-noble
+      ports:
+        - 27017:27017
+      environment:
+        MONGO_INITDB_ROOT_USERNAME: mongoadmin
+        MONGO_INITDB_ROOT_PASSWORD: secret
+
+    auth_service:
+      image: auth_image:latest
+      environment:
+        DATABASE_URL: 'mongodb://mongoadmin:secret@mongo:27017/hospital?authSource=admin'
+        JWT_SECRET_KEY: "lkfadioekdsfjs"
+      depends_on:
+        - mongo
+
+    iot_service:
+      image: iot_image:latest
+      environment:
+        DATABASE_URL: 'mongodb://mongoadmin:secret@mongo:27017/hospital?authSource=admin'
+        JWT_SECRET_KEY: "lkfadioekdsfjs"
+      depends_on:
+        - mongo
+
+    chat_service:
+      image: chat_image:latest
+      environment:
+        DATABASE_URL: 'mongodb://mongoadmin:secret@mongo:27017/hospital?authSource=admin'
+        JWT_SECRET_KEY: "lkfadioekdsfjs"
+      depends_on:
+        - mongo
+
+    core_service:
+      image: core_image:latest
+      environment:
+        DATABASE_URL: 'mongodb://mongoadmin:secret@mongo:27017/hospital?authSource=admin'
+        JWT_SECRET_KEY: "lkfadioekdsfjs"
+      depends_on:
+        - mongo
+
+    frontend:
+      image: frontend_image:latest
+
+    gateway:
+      image: gateway_image:latest
+      ports:
+        - 80:80
+        - 443:443
+      volumes:
+        - /etc/nginx/certs/hospital.ahmedkabil.me:/etc/nginx/certs/hospital.ahmedkabil.me
+      depends_on:
+        - mongo
+        - frontend
+        - auth_service
+        - iot_service
+        - chat_service
+        - core_service
+
+  volumes:
+    mongo_vol:
+       

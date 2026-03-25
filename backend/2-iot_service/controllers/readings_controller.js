@@ -4,7 +4,9 @@ const Patients = require("../models/patients-model");
 
 const getAllReadings = async (req,res) => {
     try{
-         const readings = await Readings.find(); 
+         const readings = await Readings.find()
+          .sort({ timestamp: -1 })   // NEWEST first
+          .limit(20);                // only last 20 readings         
          res.json({status: "success",data: {readings: readings}}) 
     }catch(err){
        res.status(400).json({status: "error",message: err.message})
