@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata: 
-  name: metric_servo-service-dep
+  name: metric-servo-service-dep
   namespace: hospital-ns
   labels:
-    app: metric_servo-service
+    app: metric-servo-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: metric_servo-service
+      app: metric-servo-service
   template:
     metadata:
-      name: metric_servo-service-pod
+      name: metric-servo-service-pod
       labels:
-        app: metric_servo-service
+        app: metric-servo-service
     spec:
       containers:
-        - name: metric_servo-service-cont
-          image: ahmedkabil/hospital-metric_servo-service:latest
+        - name: metric-servo-service-cont
+          image: ahmedkabil/hospital-metric-servo-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4005
@@ -35,11 +35,11 @@ spec:
 apiVersion: v1 
 kind: Service
 metadata:
-  name: metric_servo-service-srv 
+  name: metric-servo-service-srv 
   namespace: hospital-ns
 spec:
   selector:
-    app: metric_servo-service
+    app: metric-servo-service
   ports:
     - port: 4005
       targetPort: 4005

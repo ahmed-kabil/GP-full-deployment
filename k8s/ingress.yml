@@ -115,7 +115,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: metric_servo-service-srv
+                name: metric-servo-service-srv
                 port:
                   number: 4005
 #  ======================================
