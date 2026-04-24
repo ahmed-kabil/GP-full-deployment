@@ -111,6 +111,14 @@ spec:
                 port:
                   number: 4004
 #  ======================================
+          - path: /api/metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: metric_servo-service-srv
+                port:
+                  number: 4005
+#  ======================================
           - path: /api/chatbot
             pathType: Prefix
             backend:

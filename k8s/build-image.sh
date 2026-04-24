@@ -1,6 +1,6 @@
 #! /bin/bash
 
-docker build -t hospital-frontend-image:latest ../frontend/
-docker save hospital-frontend-image:latest > frontend-image.tar
-sudo ctr -n k8s.io images import frontend-image.tar
-rm -rf frontend-image.tar
+docker build -t hospital-metric_servo-image:latest ../backend/5-metric_servo_service/
+docker save hospital-metric_servo-image:latest > metric_servo-image.tar
+sudo ctr -n k8s.io images import metric_servo-image.tar
+rm -rf metric_servo-image.tar

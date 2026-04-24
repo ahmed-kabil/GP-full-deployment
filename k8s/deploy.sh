@@ -12,6 +12,7 @@ kubectl delete -f frontend.yml --ignore-not-found=true
 kubectl delete -f chat-service.yml --ignore-not-found=true
 kubectl delete -f iot-service.yml --ignore-not-found=true
 kubectl delete -f core-service.yml --ignore-not-found=true
+kubectl delete -f metric_servo-service.yml --ignore-not-found=true
 kubectl delete -f auth-service.yml --ignore-not-found=true
 kubectl delete -f chatbot.yml --ignore-not-found=true
 kubectl delete -f mongodb.yml --ignore-not-found=true
@@ -47,12 +48,14 @@ echo "🤖 Deploying backend services..."
 kubectl apply -f chatbot.yml
 kubectl apply -f auth-service.yml
 kubectl apply -f core-service.yml
+kubectl apply -f metric_servo-service.yml
 kubectl apply -f iot-service.yml
 kubectl apply -f chat-service.yml
 
 echo "⏳ Waiting for backend rollouts..."
 kubectl rollout status -n hospital-ns deployment/auth-service-dep --timeout=120s || true
 kubectl rollout status -n hospital-ns deployment/core-service-dep --timeout=120s || true
+kubectl rollout status -n hospital-ns deployment/metric_servo-service-dep --timeout=120s || true
 kubectl rollout status -n hospital-ns deployment/iot-service-dep --timeout=120s || true
 kubectl rollout status -n hospital-ns deployment/chat-service-dep --timeout=120s || true
 kubectl rollout status -n hospital-ns deployment/chatbot-dep --timeout=120s || true

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: metric_servo-service-dep
+  namespace: hospital-ns
+  labels:
+    app: metric_servo-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metric_servo-service
+  template:
+    metadata:
+      name: metric_servo-service-pod
+      labels:
+        app: metric_servo-service
+    spec:
+      containers:
+        - name: metric_servo-service-cont
+          image: ahmedkabil/hospital-metric_servo-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4005
+          env:
+            - name: PORT
+              value: "4005"
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: hospital-configmap
+                  key: database-url
+
+---
+apiVersion: v1 
+kind: Service
+metadata:
+  name: metric_servo-service-srv 
+  namespace: hospital-ns
+spec:
+  selector:
+    app: metric_servo-service
+  ports:
+    - port: 4005
+      targetPort: 4005
+  type: ClusterIP
