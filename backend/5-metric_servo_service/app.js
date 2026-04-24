@@ -3,11 +3,13 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 require('dotenv').config();
 
+require("./metrics_updater")
+
 const url = process.env.DATABASE_URL ;
 
  
 const app = express();
-const port = 7050;
+const port = process.env.PORT || 7050;
 
 // Middlewares
 app.use(cors());

@@ -3,5 +3,5 @@ WORKDIR /app
 COPY ./package.json .
 RUN npm install
 COPY . .
-ENV PORT=7040
+ENV PORT=7050
 CMD ["node","app.js"]
