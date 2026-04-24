@@ -7,6 +7,7 @@ kubectl delete -f ingress.yml --ignore-not-found=true
 kubectl delete -f frontend.yml --ignore-not-found=true
 kubectl delete -f chat-service.yml --ignore-not-found=true
 kubectl delete -f iot-service.yml --ignore-not-found=true
+kubectl delete -f auth-service.yml --ignore-not-found=true
 kubectl delete -f core-service.yml --ignore-not-found=true
 kubectl delete -f core-service.yml --ignore-not-found=true
 kubectl delete -f metric-servo-service.yml --ignore-not-found=true
