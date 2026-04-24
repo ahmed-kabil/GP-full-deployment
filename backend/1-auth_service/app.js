@@ -7,7 +7,7 @@ const url = process.env.DATABASE_URL ;
 
  
 const app = express();
-const port = 7010;
+const port = process.env.PORT || 7010;
 
 // Middlewares
 app.use(cors());

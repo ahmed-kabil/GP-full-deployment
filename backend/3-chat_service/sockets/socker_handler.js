@@ -1,9 +1,30 @@
+
+const { createClient } = require("redis");
+const { createAdapter } = require("@socket.io/redis-adapter");
+
 /**
  * Socket.io Handler for Real-time Chat
  * Supports: Doctor↔Patient and Doctor↔Nurse messaging channels
  */
 
-module.exports = (io) => {
+module.exports = async (io) => {
+
+// 1. Setup Redis Adapter for K8s Scaling
+  const redisUrl = process.env.REDIS_URL || "redis://redis-srv:6379";
+  const pubClient = createClient({ url: redisUrl });
+  const subClient = pubClient.duplicate();
+
+  pubClient.on('error', (err) => console.error('❌ Redis Pub Error:', err));
+  subClient.on('error', (err) => console.error('❌ Redis Sub Error:', err));
+
+  try {
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log("✅ Redis adapter connected. Scaling enabled!");
+  } catch (err) {
+    console.error("⚠️ Redis Connection Failed. App will run in single-pod mode.", err);
+  }
+
   io.on("connection", (socket) => {
     console.log("👤 User connected:", socket.id);
 
